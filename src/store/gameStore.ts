@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { Chess, Square } from 'chess.js';
-import type { GameStore, GameState, CoachingMemory, CoachingAnalysis } from '../types';
+import type { GameStore, GameState, CoachingMemory, CoachingAnalysis, UIState } from '../types';
 import { getEngine } from '../services/engineService';
 import { getGeminiService } from '../services/geminiService';
 import { getDatabaseService } from '../services/databaseService';
@@ -258,7 +258,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({ currentAnalysis: analysis });
   },
 
-  setUIState: (update: Partial<typeof get().uiState>) => {
+  setUIState: (update: Partial<UIState>) => {
     set({
       uiState: {
         ...get().uiState,
