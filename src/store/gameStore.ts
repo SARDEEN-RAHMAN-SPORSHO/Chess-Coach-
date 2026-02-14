@@ -21,6 +21,7 @@ const getGameState = (game: Chess): GameState => ({
   isCheckmate: game.isCheckmate(),
   isStalemate: game.isStalemate(),
   isDraw: game.isDraw(),
+  isGameOver: game.isGameOver(),
   moveHistory: game.history({ verbose: true }),
 });
 
@@ -126,6 +127,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
         const analysis = analysisResult.value.analysis;
         
         // Update memory with analysis
+        const newPositionEvolution = [
+          ...memory.positionEvolution,
+          {
+            turn: Math.floor(game.history().length / 2) + 1,
+            fen: game.fen(),
+            evaluation: analysis.memoryUpdate.positionEvolution?.[0]?.evaluation || analysis.positionEvaluation || '',
+          },
+        ].slice(-20);
+
         const updatedMemory: CoachingMemory = {
           strategicThemes: [
             ...memory.strategicThemes,
@@ -139,14 +149,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             ...memory.tacticalFocus,
             ...(analysis.memoryUpdate.tacticalFocus || []),
           ].slice(-10),
-          positionEvolution: [
-            ...memory.positionEvolution,
-            {
-              turn: Math.floor(game.history().length / 2) + 1,
-              fen: game.fen(),
-              evaluation: analysis.memoryUpdate.positionEvolution?.evaluation || '',
-            },
-          ].slice(-20),
+          positionEvolution: newPositionEvolution,
           lastUpdated: Date.now(),
         };
 
