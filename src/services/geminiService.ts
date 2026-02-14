@@ -57,48 +57,63 @@ Last Updated: ${new Date(memory.lastUpdated).toLocaleTimeString()}
   private buildPrompt(request: GeminiRequest): string {
     const { fen, moveHistory, memory, lastMove } = request;
 
-    return `You are an expert chess coach analyzing a game in real-time. Provide strategic guidance to help the player improve.
+    return `You are an expert chess coach helping a student who is playing as WHITE. Your goal is to help WHITE win the game and improve their chess skills.
+
+IMPORTANT: You are coaching the WHITE pieces. Analyze the position from WHITE's perspective and recommend the best move for WHITE to play.
 
 CURRENT POSITION (FEN): ${fen}
 
 MOVE HISTORY: ${this.formatMoveHistory(moveHistory)}
 
-${lastMove ? `LAST MOVE: ${lastMove.san} (${lastMove.from} to ${lastMove.to})` : ''}
+${lastMove ? `LAST MOVE PLAYED: ${lastMove.san} (${lastMove.from} to ${lastMove.to})` : ''}
 
 ${this.formatMemory(memory)}
+
+YOUR ROLE: You are WHITE's coach. Recommend the best move for WHITE that will:
+1. Give WHITE the best winning chances
+2. Create threats against BLACK
+3. Improve WHITE's position
+4. Help WHITE learn important chess concepts
 
 Provide a comprehensive coaching analysis in the following JSON format:
 
 {
-  "bestMove": "recommended move in algebraic notation (e.g., Nf3, e4)",
-  "explanation": "clear explanation of why this move is strong (2-3 sentences)",
-  "positionEvaluation": "brief evaluation of the position (e.g., 'White has slight advantage', 'Equal position', 'Black is winning')",
-  "recommendedContinuation": ["next 2-3 moves after your recommendation"],
+  "bestMove": "the best move for WHITE in algebraic notation (e.g., Nf3, e4, Qh5)",
+  "explanation": "explain why this move is good for WHITE - what threats it creates, what it accomplishes, how it helps WHITE win (2-3 sentences)",
+  "positionEvaluation": "evaluate who is better - WHITE or BLACK (e.g., 'White has a strong advantage', 'Position is equal', 'White is winning', 'Black has slight edge but White can fight back')",
+  "recommendedContinuation": ["WHITE's next 2-3 moves after this recommended move - the plan for WHITE to follow"],
   "opponentResponseTree": [
     {
-      "move": "likely opponent response",
-      "evaluation": "how good this response is",
+      "move": "BLACK's likely response to your recommendation",
+      "evaluation": "how good BLACK's response is and how WHITE should continue",
       "probability": "high/medium/low",
-      "continuation": ["possible next moves"]
+      "continuation": ["how WHITE should respond to BLACK's move"]
     }
   ],
-  "tacticalAlerts": ["specific tactical threats or opportunities to note"],
+  "tacticalAlerts": ["warn WHITE about any threats from BLACK, and point out any tactical opportunities for WHITE to win material or checkmate"],
   "memoryUpdate": {
-    "strategicThemes": ["key themes to remember from this position"],
-    "priorAdvice": ["summary of this coaching moment"],
-    "tacticalFocus": ["tactical patterns to watch for"],
+    "strategicThemes": ["key strategic ideas WHITE should remember"],
+    "priorAdvice": ["summary of this coaching advice for WHITE"],
+    "tacticalFocus": ["tactical patterns WHITE should watch for in this game"],
     "positionEvolution": [{
-      "evaluation": "brief position summary"
+      "evaluation": "brief evaluation of WHITE's position"
     }]
   }
 }
 
+CRITICAL REMINDERS:
+- You are coaching WHITE (the human player)
+- Recommend moves that help WHITE win
+- Explain how WHITE can create threats against BLACK
+- Warn WHITE about BLACK's threats
+- Help WHITE understand what to do next
+
 Focus on:
-1. Practical, actionable advice
-2. Explaining strategic concepts clearly
-3. Identifying tactical opportunities
-4. Building on previous coaching points
-5. Helping the player understand patterns
+1. Helping WHITE find the strongest moves
+2. Explaining WHITE's strategic plans clearly
+3. Identifying tactical opportunities for WHITE
+4. Warning WHITE about BLACK's threats
+5. Teaching WHITE chess principles to improve
 
 Return ONLY valid JSON, no additional text.`;
   }
@@ -174,12 +189,12 @@ Return ONLY valid JSON, no additional text.`;
 
   private getFallbackAnalysis(): CoachingAnalysis {
     return {
-      bestMove: 'Continue playing',
-      explanation: 'Unable to analyze position at this time. Focus on controlling the center and developing your pieces.',
+      bestMove: 'Continue developing',
+      explanation: 'Unable to analyze position at this time. Focus on controlling the center, developing your pieces, and castling your king to safety.',
       positionEvaluation: 'Analysis unavailable',
       recommendedContinuation: [],
       opponentResponseTree: [],
-      tacticalAlerts: ['AI analysis temporarily unavailable'],
+      tacticalAlerts: ['AI analysis temporarily unavailable - play solid chess fundamentals'],
       memoryUpdate: {},
     };
   }
