@@ -6,7 +6,7 @@ import GamePage from './components/GamePage';
 import LoadingSpinner from './components/LoadingSpinner';
 
 function App() {
-  const { user, isAuthenticated, isLoading, setUser } = useAuthStore();
+  const { isAuthenticated, isLoading, setUser } = useAuthStore();
 
   useEffect(() => {
     const authService = getAuthService();
