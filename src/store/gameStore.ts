@@ -53,14 +53,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
         return false;
       }
 
-      // Update game state
+      // Update game state after player move
       const newGameState = getGameState(game);
       set({
         gameState: newGameState,
-        uiState: { ...get().uiState, isEngineThinking: true, isAnalyzing: true },
+        currentAnalysis: null, // Clear old analysis
+        uiState: { ...get().uiState, isEngineThinking: true, isAnalyzing: false },
       });
 
-      // Check if game is over
+      // Check if game is over after player move
       if (game.isGameOver()) {
         set({
           uiState: {
@@ -75,56 +76,55 @@ export const useGameStore = create<GameStore>((set, get) => ({
         return true;
       }
 
-      // Parallel execution: Engine move + AI analysis
+      // STEP 1: Get opponent's move (engine)
       const engineService = getEngine();
-      const geminiService = getGeminiService();
+      const engineMove = await engineService.calculateMove(game.fen(), 3);
 
-      const [engineMoveResult, analysisResult] = await Promise.allSettled([
-        // Engine calculates opponent move
-        engineService.calculateMove(game.fen(), 3),
-        
-        // AI analyzes position
-        geminiService.analyzePosition({
-          fen: game.fen(),
-          moveHistory: game.history({ verbose: true }),
-          memory,
-          lastMove: move,
-        }),
-      ]);
+      // Make opponent's move
+      const opponentMove = game.move({
+        from: engineMove.from,
+        to: engineMove.to,
+        promotion: engineMove.promotion,
+      });
 
-      // Handle engine move
-      if (engineMoveResult.status === 'fulfilled') {
-        const engineMove = engineMoveResult.value;
-        const opponentMove = game.move({
-          from: engineMove.from,
-          to: engineMove.to,
-          promotion: engineMove.promotion,
-        });
-
-        if (opponentMove) {
-          const updatedGameState = getGameState(game);
-          set({ gameState: updatedGameState });
-
-          // Check if game is over after opponent move
-          if (game.isGameOver()) {
-            set({
-              uiState: {
-                ...get().uiState,
-                isEngineThinking: false,
-                isAnalyzing: false,
-                notification: game.isCheckmate()
-                  ? `Checkmate! ${game.turn() === 'w' ? 'Black' : 'White'} wins!`
-                  : 'Game over - Draw',
-              },
-            });
-            return true;
-          }
-        }
+      if (!opponentMove) {
+        throw new Error('Engine produced invalid move');
       }
 
+      // Update game state after opponent move
+      const stateAfterOpponent = getGameState(game);
+      set({ 
+        gameState: stateAfterOpponent,
+        uiState: { ...get().uiState, isEngineThinking: false, isAnalyzing: true },
+      });
+
+      // Check if game is over after opponent move
+      if (game.isGameOver()) {
+        set({
+          uiState: {
+            ...get().uiState,
+            isEngineThinking: false,
+            isAnalyzing: false,
+            notification: game.isCheckmate()
+              ? `Checkmate! ${game.turn() === 'w' ? 'Black' : 'White'} wins!`
+              : 'Game over - Draw',
+          },
+        });
+        return true;
+      }
+
+      // STEP 2: Now analyze for YOUR next move (after opponent has responded)
+      const geminiService = getGeminiService();
+      const analysisResult = await geminiService.analyzePosition({
+        fen: game.fen(), // Current position after opponent's move
+        moveHistory: game.history({ verbose: true }),
+        memory,
+        lastMove: opponentMove, // Opponent's last move
+      });
+
       // Handle AI analysis
-      if (analysisResult.status === 'fulfilled' && analysisResult.value.success) {
-        const analysis = analysisResult.value.analysis;
+      if (analysisResult.success) {
+        const analysis = analysisResult.analysis;
         
         // Update memory with analysis
         const newPositionEvolution = [
@@ -211,6 +211,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
         notification: 'New game started',
       },
     });
+
+    // Get opening suggestions immediately
+    setTimeout(() => {
+      const geminiService = getGeminiService();
+      geminiService.analyzePosition({
+        fen: newGame.fen(),
+        moveHistory: [],
+        memory: initialMemory,
+      }).then((result) => {
+        if (result.success) {
+          set({ currentAnalysis: result.analysis });
+        }
+      });
+    }, 500);
   },
 
   loadGame: (fen: string, pgn: string, memory: CoachingMemory) => {
@@ -236,6 +250,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
           notification: 'Game loaded',
         },
       });
+
+      // If it's white's turn, get coaching suggestions
+      if (newGame.turn() === 'w') {
+        setTimeout(() => {
+          const geminiService = getGeminiService();
+          geminiService.analyzePosition({
+            fen: newGame.fen(),
+            moveHistory: newGame.history({ verbose: true }),
+            memory,
+          }).then((result) => {
+            if (result.success) {
+              set({ currentAnalysis: result.analysis });
+            }
+          });
+        }, 500);
+      }
     } catch (error) {
       console.error('Load game error:', error);
       set({
