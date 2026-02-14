@@ -58,7 +58,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       set({
         gameState: newGameState,
         currentAnalysis: null, // Clear old analysis
-        uiState: { ...get().uiState, isEngineThinking: true, isAnalyzing: false },
+        uiState: { ...get().uiState, isEngineThinking: true, isAnalyzing: false, error: null },
       });
 
       // Check if game is over after player move
@@ -78,7 +78,24 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       // STEP 1: Get opponent's move (engine)
       const engineService = getEngine();
-      const engineMove = await engineService.calculateMove(game.fen(), 3);
+      
+      let engineMove;
+      try {
+        // Wait for engine to be ready and calculate move
+        await engineService.waitForReady();
+        engineMove = await engineService.calculateMove(game.fen(), 3);
+      } catch (engineError) {
+        console.error('Engine calculation failed:', engineError);
+        set({
+          uiState: {
+            ...get().uiState,
+            isEngineThinking: false,
+            isAnalyzing: false,
+            error: 'Engine failed to calculate move. Please refresh the page.',
+          },
+        });
+        return false;
+      }
 
       // Make opponent's move
       const opponentMove = game.move({
@@ -88,7 +105,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
       });
 
       if (!opponentMove) {
-        throw new Error('Engine produced invalid move');
+        console.error('Engine produced invalid move:', engineMove);
+        set({
+          uiState: {
+            ...get().uiState,
+            isEngineThinking: false,
+            isAnalyzing: false,
+            error: 'Engine made an invalid move. Please refresh the page.',
+          },
+        });
+        return false;
       }
 
       // Update game state after opponent move
@@ -114,62 +140,67 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
 
       // STEP 2: Now analyze for YOUR next move (after opponent has responded)
-      const geminiService = getGeminiService();
-      const analysisResult = await geminiService.analyzePosition({
-        fen: game.fen(), // Current position after opponent's move
-        moveHistory: game.history({ verbose: true }),
-        memory,
-        lastMove: opponentMove, // Opponent's last move
-      });
-
-      // Handle AI analysis
-      if (analysisResult.success) {
-        const analysis = analysisResult.analysis;
-        
-        // Update memory with analysis
-        const newPositionEvolution = [
-          ...memory.positionEvolution,
-          {
-            turn: Math.floor(game.history().length / 2) + 1,
-            fen: game.fen(),
-            evaluation: analysis.memoryUpdate.positionEvolution?.[0]?.evaluation || analysis.positionEvaluation || '',
-          },
-        ].slice(-20);
-
-        const updatedMemory: CoachingMemory = {
-          strategicThemes: [
-            ...memory.strategicThemes,
-            ...(analysis.memoryUpdate.strategicThemes || []),
-          ].slice(-10),
-          priorAdvice: [
-            ...memory.priorAdvice,
-            ...(analysis.memoryUpdate.priorAdvice || []),
-          ].slice(-15),
-          tacticalFocus: [
-            ...memory.tacticalFocus,
-            ...(analysis.memoryUpdate.tacticalFocus || []),
-          ].slice(-10),
-          positionEvolution: newPositionEvolution,
-          lastUpdated: Date.now(),
-        };
-
-        set({
-          currentAnalysis: analysis,
-          memory: updatedMemory,
+      try {
+        const geminiService = getGeminiService();
+        const analysisResult = await geminiService.analyzePosition({
+          fen: game.fen(), // Current position after opponent's move
+          moveHistory: game.history({ verbose: true }),
+          memory,
+          lastMove: opponentMove, // Opponent's last move
         });
 
-        // Save to database
-        const dbService = getDatabaseService();
-        const userId = localStorage.getItem('userId');
-        const gameId = localStorage.getItem('currentGameId');
+        // Handle AI analysis
+        if (analysisResult.success) {
+          const analysis = analysisResult.analysis;
+          
+          // Update memory with analysis
+          const newPositionEvolution = [
+            ...memory.positionEvolution,
+            {
+              turn: Math.floor(game.history().length / 2) + 1,
+              fen: game.fen(),
+              evaluation: analysis.memoryUpdate.positionEvolution?.[0]?.evaluation || analysis.positionEvaluation || '',
+            },
+          ].slice(-20);
 
-        if (userId && gameId) {
-          dbService.updateGame(gameId, {
-            fen: game.fen(),
-            pgn: game.pgn(),
+          const updatedMemory: CoachingMemory = {
+            strategicThemes: [
+              ...memory.strategicThemes,
+              ...(analysis.memoryUpdate.strategicThemes || []),
+            ].slice(-10),
+            priorAdvice: [
+              ...memory.priorAdvice,
+              ...(analysis.memoryUpdate.priorAdvice || []),
+            ].slice(-15),
+            tacticalFocus: [
+              ...memory.tacticalFocus,
+              ...(analysis.memoryUpdate.tacticalFocus || []),
+            ].slice(-10),
+            positionEvolution: newPositionEvolution,
+            lastUpdated: Date.now(),
+          };
+
+          set({
+            currentAnalysis: analysis,
             memory: updatedMemory,
-          }).catch(console.error);
+          });
+
+          // Save to database
+          const dbService = getDatabaseService();
+          const userId = localStorage.getItem('userId');
+          const gameId = localStorage.getItem('currentGameId');
+
+          if (userId && gameId) {
+            dbService.updateGame(gameId, {
+              fen: game.fen(),
+              pgn: game.pgn(),
+              memory: updatedMemory,
+            }).catch(console.error);
+          }
         }
+      } catch (analysisError) {
+        console.error('AI analysis failed:', analysisError);
+        // Don't show error for AI analysis failure, game can continue
       }
 
       set({
@@ -205,7 +236,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       currentAnalysis: null,
       uiState: {
         isLoading: false,
-        isAnalyzing: false,
+        isAnalyzing: true,
         isEngineThinking: false,
         error: null,
         notification: 'New game started',
@@ -221,8 +252,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
         memory: initialMemory,
       }).then((result) => {
         if (result.success) {
-          set({ currentAnalysis: result.analysis });
+          set({ 
+            currentAnalysis: result.analysis,
+            uiState: { ...get().uiState, isAnalyzing: false },
+          });
+        } else {
+          set({ uiState: { ...get().uiState, isAnalyzing: false } });
         }
+      }).catch((error) => {
+        console.error('Opening analysis failed:', error);
+        set({ uiState: { ...get().uiState, isAnalyzing: false } });
       });
     }, 500);
   },
@@ -244,7 +283,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         currentAnalysis: null,
         uiState: {
           isLoading: false,
-          isAnalyzing: false,
+          isAnalyzing: newGame.turn() === 'w',
           isEngineThinking: false,
           error: null,
           notification: 'Game loaded',
@@ -261,8 +300,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
             memory,
           }).then((result) => {
             if (result.success) {
-              set({ currentAnalysis: result.analysis });
+              set({ 
+                currentAnalysis: result.analysis,
+                uiState: { ...get().uiState, isAnalyzing: false },
+              });
+            } else {
+              set({ uiState: { ...get().uiState, isAnalyzing: false } });
             }
+          }).catch((error) => {
+            console.error('Position analysis failed:', error);
+            set({ uiState: { ...get().uiState, isAnalyzing: false } });
           });
         }, 500);
       }
