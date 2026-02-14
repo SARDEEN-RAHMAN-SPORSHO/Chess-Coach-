@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+'gemini-pro' { GoogleGenerativeAI } from '@google/generative-ai';
 import type { 
   CoachingAnalysis, 
   GeminiRequest,
@@ -22,7 +22,7 @@ export class GeminiService {
 
     try {
       this.ai = new GoogleGenerativeAI(API_KEY);
-      this.model = this.ai.getGenerativeModel({ model: 'gemini-pro' });
+      this.model = this.ai.getGenerativeModel({ model: 'gemini-2.5-flash' });
       this.isInitialized = true;
     } catch (error) {
       console.error('Failed to initialize Gemini:', error);
