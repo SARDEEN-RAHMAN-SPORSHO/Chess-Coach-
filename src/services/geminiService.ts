@@ -1,4 +1,4 @@
-'gemini-pro' { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { 
   CoachingAnalysis, 
   GeminiRequest,
