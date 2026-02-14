@@ -1,8 +1,6 @@
-
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { 
   CoachingAnalysis, 
-  CoachingMemory, 
   GeminiRequest,
   GeminiResponse 
 } from '../types';
@@ -24,7 +22,7 @@ export class GeminiService {
 
     try {
       this.ai = new GoogleGenerativeAI(API_KEY);
-      this.model = this.ai.getGenerativeModel({ model: 'gemini-2.5-flash' });
+      this.model = this.ai.getGenerativeModel({ model: 'gemini-pro' });
       this.isInitialized = true;
     } catch (error) {
       console.error('Failed to initialize Gemini:', error);
@@ -83,7 +81,7 @@ export class GeminiService {
   }
 
   private buildPrompt(request: GeminiRequest): string {
-    const { fen, moveHistory, memory, lastMove } = request;
+    const { fen, moveHistory, lastMove } = request;
     const isOpening = moveHistory.length < 8;
     const boardLayout = this.parseFEN(fen);
 
