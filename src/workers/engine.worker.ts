@@ -1,5 +1,5 @@
 import { Chess } from 'chess.js';
-import type { EngineMove, EngineEvaluation, EngineMessage } from '../types';
+import type { EngineEvaluation, EngineMessage } from '../types';
 
 // Simple chess engine using minimax with alpha-beta pruning
 class ChessEngine {
@@ -168,11 +168,16 @@ class ChessEngine {
       }
     }
 
+    // Only include promotion if it's a valid promotion piece
+    const promotion = bestMove.promotion && ['q', 'r', 'b', 'n'].includes(bestMove.promotion) 
+      ? (bestMove.promotion as 'q' | 'r' | 'b' | 'n')
+      : undefined;
+
     return {
       move: {
         from: bestMove.from,
         to: bestMove.to,
-        promotion: bestMove.promotion,
+        promotion,
       },
       score: bestScore,
       depth,
