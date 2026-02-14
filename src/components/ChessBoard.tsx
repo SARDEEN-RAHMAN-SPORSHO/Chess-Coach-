@@ -4,7 +4,7 @@ import { Square } from 'chess.js';
 
 interface ChessBoardProps {
   position: string;
-  onPieceDrop: (sourceSquare: Square, targetSquare: Square) => boolean;
+  onPieceDrop: (sourceSquare: Square, targetSquare: Square) => Promise<boolean>;
   boardOrientation?: 'white' | 'black';
   isDraggablePiece?: (piece: { piece: string; sourceSquare: Square }) => boolean;
   customBoardStyle?: React.CSSProperties;
@@ -17,6 +17,20 @@ const ChessBoard: React.FC<ChessBoardProps> = ({
   isDraggablePiece,
   customBoardStyle = {},
 }) => {
+  // Wrapper to handle async callback for react-chessboard
+  const handlePieceDrop = (sourceSquare: Square, targetSquare: Square): boolean => {
+    // Call async function but return true immediately to allow the visual move
+    onPieceDrop(sourceSquare, targetSquare).then((success) => {
+      // If the move was invalid, the store will revert the position
+      if (!success) {
+        console.log('Invalid move attempted');
+      }
+    });
+    // Return true to allow the piece to move visually
+    // The actual game state is managed by the store
+    return true;
+  };
+
   return (
     <div style={{
       width: '100%',
@@ -26,7 +40,7 @@ const ChessBoard: React.FC<ChessBoardProps> = ({
     }}>
       <Chessboard
         position={position}
-        onPieceDrop={onPieceDrop}
+        onPieceDrop={handlePieceDrop}
         boardOrientation={boardOrientation}
         isDraggablePiece={isDraggablePiece}
         customBoardStyle={{
