@@ -9,6 +9,7 @@ export interface GameState {
   isCheckmate: boolean;
   isStalemate: boolean;
   isDraw: boolean;
+  isGameOver: boolean;
   moveHistory: Move[];
 }
 
