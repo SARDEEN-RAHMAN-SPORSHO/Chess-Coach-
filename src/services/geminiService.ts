@@ -7,11 +7,11 @@ import type {
 } from '../types';
 import { Move } from 'chess.js';
 
-const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+const API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string;
 
 export class GeminiService {
-  private ai: GoogleGenerativeAI;
-  private model: any;
+  private ai: GoogleGenerativeAI | null = null;
+  private model: any = null;
   private isInitialized = false;
 
   constructor() {
@@ -87,9 +87,9 @@ Provide a comprehensive coaching analysis in the following JSON format:
     "strategicThemes": ["key themes to remember from this position"],
     "priorAdvice": ["summary of this coaching moment"],
     "tacticalFocus": ["tactical patterns to watch for"],
-    "positionEvolution": {
+    "positionEvolution": [{
       "evaluation": "brief position summary"
-    }
+    }]
   }
 }
 
@@ -134,7 +134,7 @@ Return ONLY valid JSON, no additional text.`;
   }
 
   async analyzePosition(request: GeminiRequest): Promise<GeminiResponse> {
-    if (!this.isInitialized) {
+    if (!this.isInitialized || !this.model) {
       return {
         analysis: this.getFallbackAnalysis(),
         success: false,
@@ -185,7 +185,7 @@ Return ONLY valid JSON, no additional text.`;
   }
 
   async testConnection(): Promise<boolean> {
-    if (!this.isInitialized) return false;
+    if (!this.isInitialized || !this.model) return false;
 
     try {
       const result = await this.model.generateContent('Say "ready"');
