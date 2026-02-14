@@ -30,7 +30,7 @@ export class GeminiService {
   }
 
   private formatMoveHistory(moves: Move[]): string {
-    if (moves.length === 0) return 'No moves yet.';
+    if (moves.length === 0) return 'Game just started - no moves yet.';
     
     return moves
       .map((move, index) => {
@@ -46,81 +46,76 @@ export class GeminiService {
   private formatMemory(memory: CoachingMemory): string {
     return `
 COACHING MEMORY:
-Strategic Themes: ${memory.strategicThemes.join(', ') || 'None yet'}
-Prior Advice: ${memory.priorAdvice.slice(-3).join(' | ') || 'None yet'}
-Tactical Focus: ${memory.tacticalFocus.join(', ') || 'None yet'}
-Position History: ${memory.positionEvolution.length} positions tracked
-Last Updated: ${new Date(memory.lastUpdated).toLocaleTimeString()}
+Strategic Themes: ${memory.strategicThemes.join(', ') || 'First game - no themes yet'}
+Prior Advice: ${memory.priorAdvice.slice(-3).join(' | ') || 'First analysis'}
+Tactical Focus: ${memory.tacticalFocus.join(', ') || 'Watch for tactics'}
     `.trim();
   }
 
   private buildPrompt(request: GeminiRequest): string {
     const { fen, moveHistory, memory, lastMove } = request;
+    const isOpening = moveHistory.length < 8;
 
-    return `You are an expert chess coach helping a student who is playing as WHITE. Your goal is to help WHITE win the game and improve their chess skills.
+    return `You are a chess coach helping a student playing WHITE. Analyze the CURRENT board position and tell WHITE what move to make NOW.
 
-IMPORTANT: You are coaching the WHITE pieces. Analyze the position from WHITE's perspective and recommend the best move for WHITE to play.
+CURRENT BOARD POSITION (FEN): ${fen}
 
-CURRENT POSITION (FEN): ${fen}
+THIS IS THE CURRENT POSITION - READ IT CAREFULLY. Check which pieces are where NOW.
 
-MOVE HISTORY: ${this.formatMoveHistory(moveHistory)}
+GAME PROGRESS: ${this.formatMoveHistory(moveHistory)}
 
-${lastMove ? `LAST MOVE PLAYED: ${lastMove.san} (${lastMove.from} to ${lastMove.to})` : ''}
+${lastMove ? `OPPONENT'S LAST MOVE: Black just played ${lastMove.san} (${lastMove.from} → ${lastMove.to})` : 'Game starting - White to move first'}
 
 ${this.formatMemory(memory)}
 
-YOUR ROLE: You are WHITE's coach. Recommend the best move for WHITE that will:
-1. Give WHITE the best winning chances
-2. Create threats against BLACK
-3. Improve WHITE's position
-4. Help WHITE learn important chess concepts
+YOUR TASK: Look at the CURRENT position (FEN above) and recommend the BEST NEXT MOVE for White.
 
-Provide a comprehensive coaching analysis in the following JSON format:
+${isOpening ? `
+OPENING PHASE: This is the opening. Suggest a strong opening move with its name.
+Focus on: controlling center (e4, d4), developing pieces (Nf3, Nc3, Bc4, Bf4), preparing castling.
+` : `
+MIDDLE/ENDGAME: Analyze the current position carefully.
+Look for: tactics, threats, piece activity, king safety, pawn structure.
+`}
+
+Return your analysis as JSON:
 
 {
-  "bestMove": "the best move for WHITE in algebraic notation (e.g., Nf3, e4, Qh5)",
-  "explanation": "explain why this move is good for WHITE - what threats it creates, what it accomplishes, how it helps WHITE win (2-3 sentences)",
-  "positionEvaluation": "evaluate who is better - WHITE or BLACK (e.g., 'White has a strong advantage', 'Position is equal', 'White is winning', 'Black has slight edge but White can fight back')",
-  "recommendedContinuation": ["WHITE's next 2-3 moves after this recommended move - the plan for WHITE to follow"],
+  "bestMove": "ONE move in algebraic notation (e.g., 'e4', 'Nf3', 'Qh5+', 'O-O')",
+  "explanation": "${isOpening ? 'Name this opening move and explain why it\'s strong (e.g., "King\'s Pawn Opening - controls center and frees bishop and queen")' : 'Explain why this move is best NOW - what does it accomplish? What threats does it create?'}",
+  "positionEvaluation": "Who is better after this move? (e.g., 'Equal position', 'White is slightly better', 'White has winning advantage')",
+  "recommendedContinuation": ["Next 2-3 moves White should consider after this"],
   "opponentResponseTree": [
     {
-      "move": "BLACK's likely response to your recommendation",
-      "evaluation": "how good BLACK's response is and how WHITE should continue",
+      "move": "Most likely Black response",
+      "evaluation": "Is this good for Black?",
       "probability": "high/medium/low",
-      "continuation": ["how WHITE should respond to BLACK's move"]
+      "continuation": ["How White should respond"]
     }
   ],
-  "tacticalAlerts": ["warn WHITE about any threats from BLACK, and point out any tactical opportunities for WHITE to win material or checkmate"],
+  "tacticalAlerts": ["Any immediate threats from Black? Any tactics White can use? (e.g., 'Watch out for Black's pin on f3', 'You can fork the king and rook with Nd5')"],
   "memoryUpdate": {
-    "strategicThemes": ["key strategic ideas WHITE should remember"],
-    "priorAdvice": ["summary of this coaching advice for WHITE"],
-    "tacticalFocus": ["tactical patterns WHITE should watch for in this game"],
+    "strategicThemes": ["Key ideas from this position"],
+    "priorAdvice": ["One-line summary of this advice"],
+    "tacticalFocus": ["Patterns to watch for"],
     "positionEvolution": [{
-      "evaluation": "brief evaluation of WHITE's position"
+      "evaluation": "Brief position status"
     }]
   }
 }
 
-CRITICAL REMINDERS:
-- You are coaching WHITE (the human player)
-- Recommend moves that help WHITE win
-- Explain how WHITE can create threats against BLACK
-- Warn WHITE about BLACK's threats
-- Help WHITE understand what to do next
+CRITICAL RULES:
+1. Recommend only ONE move that White should play RIGHT NOW
+2. Make sure this move is LEGAL in the current position
+3. Don't repeat moves already played - check the FEN and move history
+4. Be specific and practical
+5. Focus on what helps White WIN
 
-Focus on:
-1. Helping WHITE find the strongest moves
-2. Explaining WHITE's strategic plans clearly
-3. Identifying tactical opportunities for WHITE
-4. Warning WHITE about BLACK's threats
-5. Teaching WHITE chess principles to improve
-
-Return ONLY valid JSON, no additional text.`;
+Return ONLY the JSON, nothing else.`;
   }
 
   private parseResponse(responseText: string): CoachingAnalysis | null {
     try {
-      // Remove markdown code blocks if present
       const cleaned = responseText
         .replace(/```json\n?/g, '')
         .replace(/```\n?/g, '')
@@ -128,7 +123,6 @@ Return ONLY valid JSON, no additional text.`;
 
       const parsed = JSON.parse(cleaned);
 
-      // Validate required fields
       if (!parsed.bestMove || !parsed.explanation) {
         throw new Error('Missing required fields');
       }
@@ -151,7 +145,7 @@ Return ONLY valid JSON, no additional text.`;
   async analyzePosition(request: GeminiRequest): Promise<GeminiResponse> {
     if (!this.isInitialized || !this.model) {
       return {
-        analysis: this.getFallbackAnalysis(),
+        analysis: this.getFallbackAnalysis(request.moveHistory.length),
         success: false,
         error: 'Gemini service not initialized',
       };
@@ -167,7 +161,7 @@ Return ONLY valid JSON, no additional text.`;
 
       if (!analysis) {
         return {
-          analysis: this.getFallbackAnalysis(),
+          analysis: this.getFallbackAnalysis(request.moveHistory.length),
           success: false,
           error: 'Failed to parse response',
         };
@@ -180,21 +174,37 @@ Return ONLY valid JSON, no additional text.`;
     } catch (error) {
       console.error('Gemini analysis error:', error);
       return {
-        analysis: this.getFallbackAnalysis(),
+        analysis: this.getFallbackAnalysis(request.moveHistory.length),
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }
 
-  private getFallbackAnalysis(): CoachingAnalysis {
+  private getFallbackAnalysis(moveCount: number): CoachingAnalysis {
+    const isOpening = moveCount < 8;
+    
+    if (isOpening) {
+      return {
+        bestMove: moveCount === 0 ? 'e4' : 'Nf3',
+        explanation: moveCount === 0 
+          ? "King's Pawn Opening (e4) - The most popular opening move. Controls the center and frees your bishop and queen."
+          : "Develop your knight to f3 - Controls center squares and prepares castling.",
+        positionEvaluation: 'Equal position',
+        recommendedContinuation: moveCount === 0 ? ['e5', 'Nf3', 'd4'] : ['d4', 'Bc4'],
+        opponentResponseTree: [],
+        tacticalAlerts: ['AI analysis temporarily unavailable - follow opening principles'],
+        memoryUpdate: {},
+      };
+    }
+
     return {
       bestMove: 'Continue developing',
-      explanation: 'Unable to analyze position at this time. Focus on controlling the center, developing your pieces, and castling your king to safety.',
+      explanation: 'Unable to analyze. Focus on: 1) Develop all pieces, 2) Control center, 3) Castle your king, 4) Connect your rooks.',
       positionEvaluation: 'Analysis unavailable',
       recommendedContinuation: [],
       opponentResponseTree: [],
-      tacticalAlerts: ['AI analysis temporarily unavailable - play solid chess fundamentals'],
+      tacticalAlerts: ['AI analysis temporarily unavailable'],
       memoryUpdate: {},
     };
   }
