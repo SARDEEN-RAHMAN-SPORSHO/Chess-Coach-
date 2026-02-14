@@ -7,7 +7,7 @@ import type {
 } from '../types';
 import { Move } from 'chess.js';
 
-const API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string;
+const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 
 export class GeminiService {
   private ai: GoogleGenerativeAI | null = null;
@@ -22,7 +22,7 @@ export class GeminiService {
 
     try {
       this.ai = new GoogleGenerativeAI(API_KEY);
-      this.model = this.ai.getGenerativeModel({ model: 'gemini-2.5-flash' });
+      this.model = this.ai.getGenerativeModel({ model: 'gemini-pro' });
       this.isInitialized = true;
     } catch (error) {
       console.error('Failed to initialize Gemini:', error);
